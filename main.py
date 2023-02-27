@@ -8,14 +8,16 @@ from extraction import extract_from_google_sheets
 from anndata import AnnData
 import scanpy as sc
 
+
 def get_anndata(rows):
-    column_headers = rows[0][1:]
+    data_start_column = 2  # I.e. column C
+    column_headers = rows[0][data_start_column:]
     adata_input = []
     for row in rows[1:]:
-        adata_input.append(row[1:])
+        adata_input.append(row[data_start_column:])
     counts = csr_matrix(adata_input, dtype=np.float32)
     adata = AnnData(counts)
-    adata.obs_names = [f"Person_{i:d}" for i in range(adata.n_obs)]
+    adata.obs_names = [f"person_{i}" for i in range(adata.n_obs)]
     adata.var_names = [f"{column_headers[i]}" for i in range(adata.n_vars)]
     return adata
 
