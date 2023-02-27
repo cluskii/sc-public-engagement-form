@@ -4,16 +4,14 @@ import string
 
 from googleapiclient.discovery import build
 
-from settings import SPREADSHEET_ID, RANGE_NAME
 
-
-def extract_from_google_sheets(creds):
+def extract_from_google_sheets(creds, sheet_id):
     service = build('sheets', 'v4', credentials=creds)
 
     # Call the Sheets API
     sheet = service.spreadsheets()
-    result = sheet.values().get(spreadsheetId=SPREADSHEET_ID,
-                                range=RANGE_NAME).execute()
+    result = sheet.values().get(spreadsheetId=sheet_id,
+                                range="A:ZZ").execute()
     values = result.get('values', [])
 
     if not values:
@@ -21,6 +19,3 @@ def extract_from_google_sheets(creds):
     else:
         return values
 
-
-def sheets_column_index(column: str):
-    return string.ascii_uppercase.index(column)

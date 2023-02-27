@@ -1,44 +1,46 @@
-import os
-import pickle
 from datetime import datetime
 import time
 
+from scipy.sparse import csr_matrix
+import numpy as np
 from auth import authenticate_google_credentials
-from extraction import extract_from_google_sheets, sheets_column_index
-from transformation import modify_pdf
-from distribution import send_email_pdf
+from extraction import extract_from_google_sheets
+from anndata import AnnData
+import scanpy as sc
 
-from settings import OUTPUT_PDF_PATH, NAME_COL, GDC_NUM_COL, EMAIL_COL
+def get_anndata(rows):
+    column_headers = rows[0][1:]
+    adata_input = []
+    for row in rows[1:]:
+        adata_input.append(row[1:])
+    counts = csr_matrix(adata_input, dtype=np.float32)
+    adata = AnnData(counts)
+    adata.obs_names = [f"Person_{i:d}" for i in range(adata.n_obs)]
+    adata.var_names = [f"{column_headers[i]}" for i in range(adata.n_vars)]
+    return adata
+
 
 if __name__ == "__main__":
     while True:
         creds = authenticate_google_credentials()
-        rows = extract_from_google_sheets(creds)
+        rows = extract_from_google_sheets(creds, "")
+
         if rows:
-            if os.path.exists('cache.pickle'):
-                with open('cache.pickle', 'rb') as f:
-                    cache = pickle.load(f)
-            else:
-                cache = {'emails': []}
+            adata = get_anndata(rows)
+            sc.pp.normalize_total(adata, target_sum=1e4)
+            sc.pp.log1p(adata)
+            sc.pp.highly_variable_genes(adata, min_mean=0.0125, max_mean=10, min_disp=0.5)
+            # sc.pl.highly_variable_genes(adata, show=False)
+            # adata.raw = adata
+            # adata = adata[:, adata.var.highly_variable]
 
-            print(datetime.strftime(datetime.now(), "%Y-%m-%d %H:%M:%S"))
-            for row in rows[1:]:
-                name = row[sheets_column_index(NAME_COL)]
-                gdc_num = str(row[sheets_column_index(GDC_NUM_COL)])
-                email = row[sheets_column_index(EMAIL_COL)]
+            # sc.pp.regress_out(adata, ['total_counts'])
+            sc.pp.scale(adata, max_value=10)
+            sc.tl.pca(adata, svd_solver='arpack')
+            sc.pp.neighbors(adata, n_neighbors=10, n_pcs=10)
+            sc.tl.umap(adata)
+            sc.tl.leiden(adata, resolution=1)
 
-                if email not in cache['emails']:
-                    print('Creating PDF for {} ({} - {})'.format(email, name, gdc_num))
-                    modify_pdf(name, gdc_num)
-                    msg = send_email_pdf(creds, destination=email)
-                    if msg:
-                        cache['emails'].append(email)
-                        os.remove(OUTPUT_PDF_PATH)
-                else:
-                    print("Email already sent to {} ({} - {})".format(email, name, gdc_num))
+            sc.pl.umap(adata, color=['leiden'], legend_loc='on data')
 
-            # Save the credentials for the next run
-            with open('cache.pickle', 'wb') as f:
-                pickle.dump(cache, f)
-
-        time.sleep(120)
+        time.sleep(60)

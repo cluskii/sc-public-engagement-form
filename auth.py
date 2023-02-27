@@ -4,8 +4,9 @@ import pickle
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
 
-from settings import SCOPES
-
+SCOPES = [
+    'https://www.googleapis.com/auth/spreadsheets.readonly'
+]
 
 def authenticate_google_credentials():
     creds = None
@@ -23,6 +24,7 @@ def authenticate_google_credentials():
             flow = InstalledAppFlow.from_client_secrets_file(
                 'credentials.json', SCOPES)
             creds = flow.run_local_server(port=0)
+            # creds = flow.run_console()
         # Save the credentials for the next run
         with open('token.pickle', 'wb') as token:
             pickle.dump(creds, token)
