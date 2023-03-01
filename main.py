@@ -10,6 +10,7 @@ import scanpy as sc
 import tkinter
 import itertools
 
+
 def get_anndata(rows):
     data_start_column = 2  # I.e. column C
     column_headers = rows[0][data_start_column:]
@@ -28,51 +29,63 @@ if __name__ == "__main__":
     cells_on_graph = []
 
     window = tkinter.Tk()
-    window.title("Tkinter Animation Demo")
+    window.title("PCA Demonstration")
     canvas_dimension = 500
-    # Uses python 3.6+ string interpolation
     window.geometry(f'{canvas_dimension}x{canvas_dimension}')
 
     canvas = tkinter.Canvas(window)
     canvas.configure(bg="white")
     canvas.pack(fill="both", expand=True)
 
+    last_update_time = 0.0
+    creds = None
+    rows = None
+    previous_anndata = AnnData()
+
     while True:
 
-        creds = authenticate_google_credentials()
-        rows = extract_from_google_sheets(creds, "")
+        current_time = time.time()
+        if current_time > last_update_time + 30:
+            print("Fetching data again")
+            last_update_time = current_time
+            creds = authenticate_google_credentials()
+            rows = extract_from_google_sheets(creds, "")
 
-        if rows:
-            adata = get_anndata(rows)
-            sc.pp.normalize_total(adata, target_sum=1e4)
-            sc.pp.log1p(adata)
-            sc.pp.highly_variable_genes(adata, min_mean=0.0125, max_mean=10, min_disp=0.5)
-            # sc.pl.highly_variable_genes(adata, show=False)
-            # adata.raw = adata
-            # adata = adata[:, adata.var.highly_variable]
+            # two colors for new vs old
+            # Draw automatically
+            if rows:
+                adata = get_anndata(rows)
 
-            # sc.pp.regress_out(adata, ['total_counts'])
-            sc.pp.scale(adata, max_value=10)
-            sc.tl.pca(adata, svd_solver='arpack')
-            sc.pp.neighbors(adata, n_neighbors=10, n_pcs=10)
-            # sc.tl.umap(adata)
-            # sc.tl.leiden(adata, resolution=1)
+                if len(previous_anndata.obs.index.to_list()) == 0:
+                    previous_anndata = adata
 
-            # sc.pl.umap(adata, color=['leiden'], legend_loc='on data')
+                print(adata)
+                sc.pp.normalize_total(adata, target_sum=1e4)
+                sc.pp.log1p(adata)
+                sc.pp.highly_variable_genes(adata, min_mean=0.0125, max_mean=10, min_disp=0.5)
 
+                sc.pp.scale(adata, max_value=10)
+                sc.tl.pca(adata, svd_solver='arpack')
+                sc.pp.neighbors(adata, n_neighbors=10, n_pcs=10)
 
-            all_coords = list(itertools.chain.from_iterable(adata.obsm['X_pca']))
-            cell_coord_min_abs = abs( min(all_coords) )
-            cell_coord_max =  max(all_coords)
-            del all_coords
+                all_coords = list(itertools.chain.from_iterable(adata.obsm['X_pca']))
+                cell_coord_min_abs = abs(min(all_coords))
+                cell_coord_max = max(all_coords)
+                del all_coords
 
-            for cell in cells_on_graph:
-                canvas.delete(cell)
+                for cell in cells_on_graph:
+                    canvas.delete(cell)
 
-            for cell in adata.obsm['X_pca']:
-                cell_x = ((cell_coord_min_abs + cell[0])/cell_coord_max) * canvas_dimension/2
-                cell_y = ((cell_coord_min_abs + cell[1])/cell_coord_max) * canvas_dimension/2
-                cells_on_graph.append(canvas.create_oval(cell_x-0.5, cell_y-0.5, cell_x+0.5, cell_y+0.5))
+                for i, cell in enumerate(adata.obsm['X_pca']):
+                    cell_x = (((cell_coord_min_abs + cell[0]) / cell_coord_max) * canvas_dimension / 2) + 50
+                    cell_y = (((cell_coord_min_abs + cell[1]) / cell_coord_max) * canvas_dimension / 2) + 50
 
+                    color = 'black'
+                    if adata.obs.index.to_list()[i] not in previous_anndata.obs.index.to_list():
+                        color = 'red'
 
-        time.sleep(30)
+                    cells_on_graph.append(canvas.create_oval(cell_x - 5, cell_y - 5, cell_x + 5, cell_y + 5, fill=color))
+
+                previous_anndata = adata
+        window.update()
+        time.sleep(0.1)
